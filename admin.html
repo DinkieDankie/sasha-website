@@ -164,11 +164,13 @@
       <img class="img-preview" id="imgPreview" alt="Preview" />
       <button class="img-clear" id="imgClear" onclick="clearImage()">&#10005; Remove photo</button>
       <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-        <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)" />
-        <div class="upload-icon">&#128247;</div>
-        <p><strong>Tap to choose a photo</strong><br/>from your camera roll or take a new one</p>
-        <small>JPEG, PNG, HEIC &mdash; any size</small>
+        <input type="file" id="fileInput" accept="image/*,video/*" onchange="handleFile(event)" />
+        <div class="upload-icon" id="uploadIcon">&#128247;&#127916;</div>
+        <p><strong>Tap to choose a photo or video</strong><br/>from your camera roll or take a new one</p>
+        <small>Photo: JPEG, PNG, HEIC &mdash; Video: MP4, MOV (max 40 MB)</small>
       </div>
+      <video id="vidPreview" style="display:none;width:100%;border-radius:8px;margin-top:.6rem;" controls playsinline></video>
+      <small id="vidInfo" style="display:none;color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block;"></small>
     </div>
 
     <div class="or-divider">or paste a link</div>
@@ -212,6 +214,7 @@
 
   let currentSection = 'nairobi';
   let currentFile    = null;
+  let currentFileIsVideo = false;
 
   // ── INIT ─────────────────────────────────────────────────────────
   async function init() {
@@ -261,25 +264,78 @@
     document.getElementById('fTitle').placeholder = ph[currentSection];
   }
 
-  // ── IMAGE ─────────────────────────────────────────────────────────
+  // ── FILE HANDLING ────────────────────────────────────────────────
+  function formatBytes(b) {
+    return b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB';
+  }
+
+  function resizeImage(file) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1920;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          const r = Math.min(MAX/w, MAX/h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => resolve(new File([blob], 'photo.jpg', {type:'image/jpeg'})), 'image/jpeg', 0.82);
+      };
+      img.src = url;
+    });
+  }
+
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
+    const isVideo = file.type.startsWith('video/');
     currentFile = file;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const prev = document.getElementById('imgPreview');
-      prev.src = ev.target.result;
-      prev.style.display = 'block';
-      document.getElementById('imgClear').style.display = 'block';
-      document.getElementById('uploadZone').style.display = 'none';
-    };
-    reader.readAsDataURL(file);
+    currentFileIsVideo = isVideo;
+
+    if (isVideo) {
+      // Video preview + size info
+      const vid = document.getElementById('vidPreview');
+      vid.src = URL.createObjectURL(file);
+      vid.style.display = 'block';
+      document.getElementById('imgPreview').style.display = 'none';
+      const info = document.getElementById('vidInfo');
+      const mb = file.size / 1048576;
+      info.style.display = 'block';
+      if (mb > 40) {
+        info.innerHTML = '&#9888; ' + formatBytes(file.size) + ' &mdash; te groot (max 40 MB). Trim de video of film in HD 720p.';
+        info.style.color = '#e07070';
+      } else {
+        info.innerHTML = '&#10003; ' + formatBytes(file.size) + ' &mdash; goed formaat!';
+        info.style.color = '#7ec87e';
+      }
+    } else {
+      // Image preview
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const prev = document.getElementById('imgPreview');
+        prev.src = ev.target.result;
+        prev.style.display = 'block';
+        document.getElementById('vidPreview').style.display = 'none';
+        document.getElementById('vidInfo').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.getElementById('imgClear').style.display = 'block';
+    document.getElementById('uploadZone').style.display = 'none';
   }
 
   function clearImage() {
     currentFile = null;
+    currentFileIsVideo = false;
     document.getElementById('imgPreview').style.display = 'none';
+    document.getElementById('vidPreview').style.display = 'none';
+    document.getElementById('vidInfo').style.display = 'none';
     document.getElementById('imgClear').style.display = 'none';
     document.getElementById('fileInput').value = '';
     document.getElementById('uploadZone').style.display = 'block';
@@ -295,20 +351,35 @@
     btn.disabled = true;
 
     let imageUrl = document.getElementById('fImageUrl').value.trim();
+    let videoFileUrl = '';
 
-    // Upload photo to Supabase Storage if one was chosen
+    // Upload photo or video to Supabase Storage
     if (currentFile) {
-      const ext  = currentFile.name.split('.').pop() || 'jpg';
-      const path = 'posts/' + Date.now() + '.' + ext;
-      const { data: upData, error: upErr } = await sb.storage.from('media').upload(path, currentFile);
+      let fileToUpload = currentFile;
+      const ext = currentFile.name.split('.').pop() || (currentFileIsVideo ? 'mp4' : 'jpg');
+      const folder = currentFileIsVideo ? 'videos' : 'posts';
+
+      // Auto-resize images before upload
+      if (!currentFileIsVideo) {
+        btn.innerHTML = '<span class="spinner"></span>Resizing…';
+        fileToUpload = await resizeImage(currentFile);
+      }
+
+      const path = folder + '/' + Date.now() + '.' + ext;
+      btn.innerHTML = '<span class="spinner"></span>Uploading…';
+      const { data: upData, error: upErr } = await sb.storage.from('media').upload(path, fileToUpload);
       if (upErr) {
-        alert('Photo upload failed: ' + upErr.message + '\n\nTip: make sure the "media" bucket exists in Supabase Storage and is set to Public.');
+        alert('Upload failed: ' + upErr.message);
         btn.innerHTML = 'Save & publish ✦';
         btn.disabled = false;
         return;
       }
       const { data: urlData } = sb.storage.from('media').getPublicUrl(path);
-      imageUrl = urlData.publicUrl;
+      if (currentFileIsVideo) {
+        videoFileUrl = urlData.publicUrl;
+      } else {
+        imageUrl = urlData.publicUrl;
+      }
     }
 
     const post = {
@@ -316,7 +387,7 @@
       title:     title,
       caption:   document.getElementById('fCaption').value.trim(),
       image_url: imageUrl,
-      video_url: document.getElementById('fVideoUrl').value.trim(),
+      video_url: videoFileUrl || document.getElementById('fVideoUrl').value.trim(),
       location:  document.getElementById('fLocation').value.trim(),
       tags:      document.getElementById('fTags').value.trim(),
       date:      new Date().toISOString().slice(0, 10)
