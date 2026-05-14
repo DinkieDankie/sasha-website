@@ -261,8 +261,13 @@
   // ── YOUTUBE EMBED ─────────────────────────────────────────────────
   function embedUrl(url) {
     if (!url) return null;
-    const m = url.match(/(?:v=|youtu\.be\/|shorts\/)([^&?#\s]+)/);
-    return m ? 'https://www.youtube.com/embed/' + m[1] + '?rel=0&modestbranding=1' : null;
+    // YouTube
+    const yt = url.match(/(?:v=|youtu\.be\/|shorts\/)([^&?#\s]+)/);
+    if (yt) return 'https://www.youtube.com/embed/' + yt[1] + '?rel=0&modestbranding=1';
+    // TikTok (full URL: tiktok.com/@user/video/ID)
+    const tt = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+    if (tt) return 'https://www.tiktok.com/embed/v2/' + tt[1];
+    return null;
   }
 
   // ── CARD ─────────────────────────────────────────────────────────
