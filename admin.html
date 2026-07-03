@@ -142,6 +142,7 @@
       <div class="tab active" data-sec="nairobi" onclick="selectTab(this)">&#128205; Nairobi</div>
       <div class="tab" data-sec="fitness" onclick="selectTab(this)">&#128170; Fitness</div>
       <div class="tab" data-sec="fashion" onclick="selectTab(this)">&#128248; Fashion</div>
+      <div class="tab" data-sec="makeup" onclick="selectTab(this)">&#128144; Make-up</div>
     </div>
 
     <!-- FORM -->
@@ -260,7 +261,7 @@
     currentSection = el.dataset.sec;
     document.getElementById('locationBlock').style.display =
       currentSection === 'nairobi' ? 'block' : 'none';
-    const ph = { nairobi:'e.g. Morning run at Karura Forest', fitness:'e.g. Leg Day Circuit', fashion:'e.g. Sunday Ankara Look' };
+    const ph = { nairobi:'e.g. Morning run at Karura Forest', fitness:'e.g. Leg Day Circuit', fashion:'e.g. Sunday Ankara Look', makeup:'e.g. Everyday Glow Tutorial' };
     document.getElementById('fTitle').placeholder = ph[currentSection];
   }
 
@@ -428,7 +429,7 @@
       el.innerHTML = '<p class="no-posts">No posts yet — add your first one above.</p>';
       return;
     }
-    const labels = { nairobi:'Nairobi', fitness:'Fitness', fashion:'Fashion' };
+    const labels = { nairobi:'Nairobi', fitness:'Fitness', fashion:'Fashion', makeup:'Make-up' };
     el.innerHTML = posts.map(p =>
       '<div class="post-card">'
       + (p.image_url ? '<img class="post-card-thumb" src="' + p.image_url + '" alt="' + p.title + '" onerror="this.style.background=\'#2a1a0a\'">' : '<div class="post-card-thumb"></div>')
